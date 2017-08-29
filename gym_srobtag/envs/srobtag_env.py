@@ -38,7 +38,7 @@ class SrobtagEnv(gym.Env):
                   [ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9]]
         self.layout = np.pad(layout, pad_width=1, mode='constant',
                              constant_values=-1)
-        self.ext2int_state = coords_table(layout)
+        self.ext2int_state = coords_table(self.layout)
 
         # North, South, East, West, Tag
         self.action_space   = spaces.Discrete(5)
@@ -63,7 +63,8 @@ class SrobtagEnv(gym.Env):
 
 
     def _observation(self):
-        return self.layout[ self.state[0] ] if self.state[0] != self.state[1] \
+        return self.layout[ tuple(self.state[0]) ] \
+                        if not np.array_equal(self.state[0], self.state[1]) \
                         else self.OBSERVATION_SAME
 
 
@@ -77,20 +78,22 @@ class SrobtagEnv(gym.Env):
 
 
     def _move_robot(self, offset):
-        next_state = self.state + offset
-        if self.layout[next_state] >= 0:
-            self.state = next_state
+        next_state = self.state[0] + offset
+        if self.layout[tuple(next_state)] >= 0:
+            self.state[0] = next_state
         # Stay in place if next move would be out of bounds.
 
 
     def _is_step_out_of_bounds(self, offset):
-        return self.layout[ self.state[1] + offset ] < 0
+        return self.layout[ tuple(self.state[1] + offset) ] < 0
 
 
     # TODO: Make this more elegant. (RM 2017-08-28)
+    # Note: The article doesn't specify what happens if the Opponent can't move
+    # away. I assume it stays in place.
     def _move_opponent(self):
         # Maybe stay in place.
-        if self.np_random.random() < 0.2:
+        if self.np_random.rand() < 0.2:
             return
 
         difference = self.state[1] - self.state[0]
@@ -106,9 +109,10 @@ class SrobtagEnv(gym.Env):
         remaining_choices = [c for c in choices
                              if not self._is_step_out_of_bounds(c)]
 
-        offset = remaining_choices[np.randint(len(remaining_choices))]
-        self.state[1] += offset
-
+        if remaining_choices:  # Only move if it increases distance to Robot.
+            offset = remaining_choices[
+                        self.np_random.randint(len(remaining_choices))]
+            self.state[1] += offset
 
 
     def _step(self, action):
